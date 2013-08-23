@@ -14,7 +14,7 @@
         <header id="banner" class="body">
                 <h1><a href="/">wc </a></h1>
                 <nav><ul>
-                                                                                    <li ><a href="/category/programming.html">Programming</a></li>
+                                                                                    <li ><a href="/category/misc.html">misc</a></li>
                                                 </ul></nav>
         </header><!-- /#banner -->
                 
@@ -22,7 +22,7 @@
 
                             <aside id="featured" class="body">
                 <article>
-                    <h1 class="entry-title"><a href="/redis_1.html">Redis学习（二）</a></h1> 
+                    <h1 class="entry-title"><a href="/photos.html">Photos</a></h1> 
                     <footer class="post-info">
         <abbr class="published" title="2013-08-23T00:00:00">
                 五 23 八月 2013
@@ -31,106 +31,10 @@
                 <address class="vcard author">
                 By <a class="url fn" href="/author/wc.html">wc</a>
         </address>
-        <p>In <a href="/category/programming.html">Programming</a>. </p>
-<p>tags: <a href="/tag/crawler.html">Crawler</a></p>
-</footer><!-- /.post-info --><p>在（一）中学习了Redis的基础，下面用Redis来搞出一点事情。</p>
-<blockquote>
-<p>Mastering Redis isn't about memorizing all the commands (not that there's an insane amount). It's about: </p>
-</blockquote>
-<ul>
-<li>understanding the 5 data structures</li>
-<li>understanding how to model data and query it using Redis</li>
-<li>combining a and b to easily tell whether Redis is a good fit.</li>
-</ul>
-<p>来看一下<a href="jobs.openmymind.net">jobs.openmymind.net</a>这个网站有关redis的部分。它的任务是从各种地方收集编程工作,展示并推送它们。源码在<a href="https://github.com/karlseguin/jobs.openmymind.net">github</a>上。</p>
-<h2>Saving Jobs</h2>
-<p>有一个后台进程从大量RSS和json中获取当前工作。我们的手段是保留每个工作的String value。key的格式是<code>job:SOURCE:SOURCE_ID</code>。So，如果github这一source视作1，那么<code>http://jobs.github.com/positions/73c9e09a-09b0-11e1-9819-355783013ce0</code>上面的工作将拥有一个key<code>job:1:73c9e09a-09b0-11e1-9819-355783013ce0</code>。value则是该工作的detail。</p>
-<p>假设我们将jobs解析为hash，将它存入redis将是这样子：</p>
-<div class="highlight"><pre><span class="n">def</span> <span class="n">save</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
-    <span class="n">key</span> <span class="o">=</span> <span class="s">&quot;job:#{job[:source]}:#{job[:source_id]}&quot;</span>
-    <span class="n">redis</span><span class="p">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">job</span><span class="p">.</span><span class="n">to_json</span><span class="p">)</span>
-<span class="n">end</span>
-</pre></div>
+        <p>In <a href="/category/misc.html">misc</a>. </p>
 
-
-<p>现在，我们想要把搜寻到的工作按时间降序发布。我们不做分页，只展示最近的X个jobs。So，我们不能按上面的代码那样做，我们需要按日期对key排序，一开始的尝试是这样的：</p>
-<div class="highlight"><pre><span class="n">def</span> <span class="n">save</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
-  <span class="n">key</span> <span class="o">=</span> <span class="s">&quot;job:#{job[:source]}:#{job[:source_id]}&quot;</span>
-  <span class="n">redis</span><span class="p">.</span><span class="n">multi</span> <span class="k">do</span>  <span class="err">#</span><span class="n">begins</span> <span class="n">a</span> <span class="n">transaction</span>
-    <span class="n">redis</span><span class="p">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">job</span><span class="p">.</span><span class="n">to_json</span><span class="p">)</span>
-    <span class="n">redis</span><span class="p">.</span><span class="n">lpush</span><span class="p">(</span><span class="err">&#39;</span><span class="n">jobs</span><span class="err">&#39;</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
-  <span class="n">end</span>
-<span class="n">end</span>
-</pre></div>
-
-
-<p>但这样做并没有实际生效，因为我们将搜寻到的工作插入Redis的时间和工作发布的时间并不匹配。解决方案是用一个sorted set替代list：</p>
-<div class="highlight"><pre><span class="n">def</span> <span class="n">save</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
-  <span class="n">key</span> <span class="o">=</span> <span class="s">&quot;job:#{job[:source]}:#{job[:source_id]}&quot;</span>
-  <span class="n">redis</span><span class="p">.</span><span class="n">multi</span> <span class="k">do</span>
-    <span class="n">redis</span><span class="p">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">job</span><span class="p">.</span><span class="n">to_json</span><span class="p">)</span>
-    <span class="n">redis</span><span class="p">.</span><span class="n">zadd</span><span class="p">(</span><span class="err">&#39;</span><span class="n">jobs</span><span class="err">&#39;</span><span class="p">,</span> <span class="n">job</span><span class="p">[</span><span class="o">:</span><span class="n">created_at</span><span class="p">],</span> <span class="n">key</span><span class="p">)</span> <span class="err">#</span> <span class="o">:</span><span class="n">created_at</span> <span class="n">is</span> <span class="n">already</span> <span class="n">an</span> <span class="n">integer</span> <span class="p">(</span><span class="n">seconds</span> <span class="n">since</span> <span class="p">..)</span>
-  <span class="n">end</span>
-<span class="n">end</span>
-</pre></div>
-
-
-<h2>Listing Jobs</h2>
-<p>我们不仅拥有工作的信息，还获取了他们排序后的keys。So，从Redis中获取工作信息并展示并不困难：</p>
-<div class="highlight"><pre><span class="n">def</span> <span class="n">get_latest_jobs</span>
-  <span class="n">keys</span> <span class="o">=</span> <span class="n">redis</span><span class="p">.</span><span class="n">zrevrange</span><span class="p">(</span><span class="err">&#39;</span><span class="n">jobs</span><span class="err">&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">150</span><span class="p">)</span>
-  <span class="n">jobs</span> <span class="o">=</span> <span class="n">redis</span><span class="p">.</span><span class="n">mget</span><span class="p">(</span><span class="o">*</span><span class="n">keys</span><span class="p">)</span>
-  <span class="n">jobs</span><span class="p">.</span><span class="n">map</span> <span class="k">do</span> <span class="o">|</span><span class="n">j</span><span class="o">|</span>
-    <span class="n">job</span> <span class="o">=</span> <span class="n">JSON</span><span class="p">.</span><span class="n">parse</span><span class="p">(</span><span class="n">j</span><span class="p">)</span>
-    <span class="n">job</span><span class="p">[</span><span class="err">&#39;</span><span class="n">created_at</span><span class="err">&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Time</span><span class="p">.</span><span class="n">at</span><span class="p">(</span><span class="n">job</span><span class="p">[</span><span class="err">&#39;</span><span class="n">created_at</span><span class="err">&#39;</span><span class="p">])</span>
-    <span class="n">job</span>
-  <span class="n">end</span>
-<span class="n">end</span>
-</pre></div>
-
-
-<p>Sorted sets是根据score从低到高排序的，这意味着越往后的时间score越高。如果我们需要抓取最近150条信息，就要根据score值倒序抓取，这就是用<code>zrevrange</code>的原因（rev for reverse）。</p>
-<p>现在我们获取了一个key数组，在此基础上用mget获取实际的job value。</p>
-<h2>Cleaning Jobs</h2>
-<p>由于我们只展示最近的150个工作信息，保留旧的工作就变得很傻了。需要做的是删除旧工作的keys并将它们从sorted set中除掉。所有这些事情可以一步搞定：</p>
-<div class="highlight"><pre><span class="n">redis</span><span class="p">.</span><span class="n">multi</span> <span class="k">do</span>
-    <span class="n">keys</span> <span class="o">=</span> <span class="n">redis</span><span class="p">.</span><span class="n">zrange</span><span class="p">(</span><span class="err">&#39;</span><span class="n">jobs</span><span class="err">&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">300</span><span class="p">)</span>
-    <span class="n">redis</span><span class="p">.</span><span class="n">del</span><span class="p">(</span><span class="o">*</span><span class="n">keys</span><span class="p">)</span>
-    <span class="n">redis</span><span class="p">.</span><span class="n">zrem</span><span class="p">(</span><span class="err">&#39;</span><span class="n">jobs</span><span class="err">&#39;</span><span class="p">,</span> <span class="o">*</span><span class="n">keys</span><span class="p">)</span>
-<span class="n">end</span>
-</pre></div>
-
-
-<p>因为<code>zrange</code>是正序排序，所以这里的-300就是倒数第300个，虽然用-150最效率，但是多保留一点作缓冲更稳妥。</p>
-<p>作为替代，我们也可以用<code>EXPIRE</code>这个key-command这个命令让Redis自动清除旧的工作（例如，10天以前的）。</p>
-<h2>Twitter Integration</h2>
-<p>Redis拥有良好的发布与订阅API。有很好的诸如<code>Resque</code>之类的库能让你在Redis的基础上构建鲁棒的队列。</p>
-<p>当我们找到新的工作时，将添加key到list中。So，保存一个工作看上去将会是这样：</p>
-<div class="highlight"><pre><span class="n">def</span> <span class="n">save</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
-  <span class="n">key</span> <span class="o">=</span> <span class="s">&quot;job:#{job[:source]}:#{job[:source_id]}&quot;</span>
-  <span class="k">if</span> <span class="o">!</span><span class="n">redis</span><span class="p">.</span><span class="n">exists</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-    <span class="n">redis</span><span class="p">.</span><span class="n">rpush</span><span class="p">(</span><span class="err">&#39;</span><span class="n">jobs</span><span class="o">:</span><span class="n">new</span><span class="err">&#39;</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
-  <span class="n">end</span>
-  <span class="n">redis</span><span class="p">.</span><span class="n">multi</span> <span class="k">do</span>
-    <span class="n">redis</span><span class="p">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">job</span><span class="p">.</span><span class="n">to_json</span><span class="p">)</span>
-    <span class="n">redis</span><span class="p">.</span><span class="n">zadd</span><span class="p">(</span><span class="err">&#39;</span><span class="n">jobs</span><span class="err">&#39;</span><span class="p">,</span> <span class="n">job</span><span class="p">[</span><span class="o">:</span><span class="n">created_at</span><span class="p">],</span> <span class="n">key</span><span class="p">)</span>
-  <span class="n">end</span>
-<span class="n">end</span>
-</pre></div>
-
-
-<p>然后可以运行一个后台任务来<code>pop</code>工作并推送它们：</p>
-<div class="highlight"><pre><span class="n">def</span> <span class="n">get_new_job</span>
-  <span class="n">key</span> <span class="o">=</span> <span class="n">redis</span><span class="p">.</span><span class="n">lpop</span><span class="p">(</span><span class="err">&#39;</span><span class="n">jobs</span><span class="o">:</span><span class="n">new</span><span class="err">&#39;</span><span class="p">)</span>
-  <span class="n">key</span> <span class="o">?</span> <span class="n">JSON</span><span class="p">.</span><span class="n">parse</span><span class="p">(</span><span class="n">redis</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">))</span> <span class="o">:</span> <span class="n">nil</span>
-<span class="n">end</span>
-</pre></div>
-
-
-<h2>That's it</h2>
-<blockquote>
-<p>Finally, if you are interested in more Redis modeling discussions, you might be interested in these other two posts of mine: <a href="http://openmymind.net/2011/5/8/Practical-NoSQL-Solving-a-Real-Problem-w-Mongo-Red/">Practical NoSQL - Solving a Real Problem with MongoDB and Redis</a> and <a href="http://openmymind.net/2011/7/5/Rethink-your-Data-Model/">Rethink your Data Model</a>. If you are interested in a more complex real-world application, check out <a href="https://github.com/antirez/lamernews">LamerNews</a>.</p>
-</blockquote>                </article>
+</footer><!-- /.post-info --><p>===========================</p>
+<p><img alt="Alt text" src="http://photos.tuchong.com/227665/1/4364334.jpg" title="地大 雪" /></p>                </article>
                                     <p class="paginator">
         Page 1 / 1
     </p>
